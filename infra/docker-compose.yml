@@ -1,5 +1,4 @@
 # Production stack on the VM. Local development layers docker-compose.dev.yml on top.
-# Caddy (TLS edge) is added with the Caddyfile.
 name: careeros
 
 x-logging: &logging
@@ -85,6 +84,27 @@ services:
     networks: [data, edge]
     logging: *logging
 
+  caddy:
+    # The only service with published ports. It sits on edge only, so it can never reach db.
+    image: caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in infra/.env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in infra/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [edge]
+    logging: *logging
+
 networks:
   # internal: no route in or out of the host, so Postgres can never be published by accident.
   data:
@@ -93,3 +113,6 @@ networks:
 
 volumes:
   pgdata: {}
+  # Holds the ACME account and certificates; losing it means re-issuing.
+  caddy_data: {}
+  caddy_config: {}

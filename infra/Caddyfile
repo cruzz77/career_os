@@ -1,0 +1,37 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# Blueprint section 8: the largest legitimate body is a 5 MB resume upload.
+	request_body {
+		max_size 6MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	reverse_proxy api:8000 {
+		health_uri /health
+		health_interval 10s
+	}
+
+	# Caddy logs request headers by default. The proxy secret, session cookie and client IP
+	# must never reach a log line, so they are deleted before the entry is written.
+	log {
+		output stdout
+		format filter {
+			request>headers>X-Proxy-Secret delete
+			request>headers>Cookie delete
+			request>headers>X-Client-Ip delete
+			resp_headers>Set-Cookie delete
+			wrap json
+		}
+	}
+}
