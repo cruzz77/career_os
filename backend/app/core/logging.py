@@ -13,6 +13,7 @@ from typing import Final
 import structlog
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from structlog.tracebacks import ExceptionDictTransformer
 
 from app.core.config import LogLevel
 
@@ -64,10 +65,22 @@ def _build_formatter(
         structlog.stdlib.ProcessorFormatter.remove_processors_meta
     ]
     if json_output:
-        rendering += [structlog.processors.dict_tracebacks, structlog.processors.JSONRenderer()]
+        rendering += [_exception_dict_renderer(), structlog.processors.JSONRenderer()]
     else:
-        rendering.append(structlog.dev.ConsoleRenderer())
+        rendering.append(
+            structlog.dev.ConsoleRenderer(
+                colors=sys.stdout.isatty(), exception_formatter=structlog.dev.plain_traceback
+            )
+        )
     return structlog.stdlib.ProcessorFormatter(foreign_pre_chain=shared, processors=rendering)
+
+
+def _exception_dict_renderer() -> structlog.processors.ExceptionRenderer:
+    # structlog's stock dict_tracebacks captures every frame's local variables. On this API
+    # those include passwords, session tokens and resume text, which must never be logged.
+    return structlog.processors.ExceptionRenderer(
+        ExceptionDictTransformer(show_locals=False, use_rich=False)
+    )
 
 
 def _route_uvicorn_loggers_to_root() -> None:

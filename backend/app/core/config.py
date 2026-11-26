@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     session_sliding_ttl_days: int = Field(default=7, ge=1)
     session_absolute_ttl_days: int = Field(default=30, ge=1)
 
+    rate_limit_signup_per_ip_per_hour: int = Field(default=5, ge=1)
+    rate_limit_login_per_ip_per_15_min: int = Field(default=20, ge=1)
+    rate_limit_login_per_email_per_15_min: int = Field(default=10, ge=1)
+
     # Owned by the Retrieval chat; the Dockerfile bakes the same value in as a build arg.
     embedding_model: str = "BAAI/bge-small-en-v1.5"
 

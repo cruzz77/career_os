@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.20.1",
+    "email-validator>=2.4.0",
     "fastapi>=0.165.0",
     "fastembed>=0.9.1",
     "pgvector>=0.5.1",
@@ -60,6 +61,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 addopts = "-ra --strict-markers --strict-config -m 'not external'"
+filterwarnings = ["error"]
 markers = [
     "integration: needs the ParadeDB testcontainer",
     "external: hits a network service or costs money; run explicitly with -m external",

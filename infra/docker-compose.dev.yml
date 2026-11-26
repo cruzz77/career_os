@@ -1,0 +1,10 @@
+# Local development only: publishes Postgres on loopback so the API and tests can run on the host.
+# Docker cannot publish ports from a container attached only to an internal network, hence `dev`.
+services:
+  db:
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    networks: [data, dev]
+
+networks:
+  dev: {}

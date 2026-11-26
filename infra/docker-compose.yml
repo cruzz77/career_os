@@ -1,0 +1,95 @@
+# Production stack on the VM. Local development layers docker-compose.dev.yml on top.
+# Caddy (TLS edge) is added with the Caddyfile.
+name: careeros
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  db:
+    # Tag for humans, digest for immutability: a tag can be re-pushed, a digest cannot.
+    # Tests and CI must use this exact reference.
+    image: paradedb/paradedb:0.27.1-pg17@sha256:8e5483653e2af1b904428dd025e4ac9564c01a4e10d3af196e73537f8cb94c3f
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-careeros}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-careeros}
+    # Sized for the blueprint's minimum VM (2 vCPU / 4 GB). maintenance_work_mem is high because
+    # HNSW and BM25 index builds are bounded by it. Revisit once the VM size is final.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=50
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    networks: [data]
+    logging: *logging
+
+  migrate:
+    image: ${API_IMAGE:-careeros-api:local}
+    command: ["alembic", "upgrade", "head"]
+    env_file: [.env]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [data]
+    logging: *logging
+
+  api:
+    image: ${API_IMAGE:-careeros-api:local}
+    restart: unless-stopped
+    env_file: [.env]
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status != 200)"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    # data: reaches Postgres. edge: Caddy in front, and outbound internet for Groq.
+    networks: [data, edge]
+    logging: *logging
+
+networks:
+  # internal: no route in or out of the host, so Postgres can never be published by accident.
+  data:
+    internal: true
+  edge: {}
+
+volumes:
+  pgdata: {}
