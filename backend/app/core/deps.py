@@ -16,6 +16,7 @@ from app.core.readiness import ReadinessCheck
 from app.db.session import Database
 from app.domain.auth import AuthenticatedUser, ClientInfo
 from app.modules.auth.service import AuthService
+from app.modules.jobs.freshness import JobFreshnessService
 
 CLIENT_IP_HEADER: Final = "X-Client-IP"
 
@@ -28,6 +29,7 @@ class AppState:
     rate_limiter: RateLimiter
     rate_limits: RateLimits
     auth_service: AuthService
+    job_freshness: JobFreshnessService
 
 
 def get_app_state(request: Request) -> AppState:

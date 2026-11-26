@@ -1,0 +1,11 @@
+[Unit]
+Description=Run CareerOS purge daily
+
+[Timer]
+# 03:15 IST, the quietest hour for an India-first audience.
+OnCalendar=*-*-* 21:45:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

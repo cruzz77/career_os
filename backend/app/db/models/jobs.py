@@ -25,7 +25,14 @@ from sqlalchemy.dialects.postgresql import BYTEA, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, Timestamps, UUIDPrimaryKey, enum_check
-from app.domain.enums import EmploymentType, JobStatus, Seniority, SkillRequirement, WorkMode
+from app.domain.enums import (
+    EmploymentType,
+    ExpiredReason,
+    JobStatus,
+    Seniority,
+    SkillRequirement,
+    WorkMode,
+)
 
 EMBEDDING_DIMENSIONS: Final = 384
 _SHA256_BYTES: Final = 32
@@ -71,6 +78,32 @@ class Job(UUIDPrimaryKey, Timestamps, Base):
             name="expires_after_posted",
         ),
         CheckConstraint("last_seen_at >= first_seen_at", name="seen_in_order"),
+        enum_check("expired_reason", ExpiredReason),
+        # Blueprint 5: an expired job always says when and why; an active one says neither.
+        CheckConstraint(
+            "(status = 'expired') = (expired_at IS NOT NULL AND expired_reason IS NOT NULL)",
+            name="expired_fields_iff_expired",
+        ),
+        # The rule above alone would let an active job carry one of the two fields.
+        CheckConstraint(
+            "(expired_at IS NULL) = (expired_reason IS NULL)", name="expired_at_with_reason"
+        ),
+        CheckConstraint("length(btrim(source_board)) > 0", name="source_board_not_blank"),
+        # Stale sweep: active jobs not seen for 24 h.
+        Index("ix_jobs_active_last_seen_at", "last_seen_at", postgresql_where=_ACTIVE),
+        # Purge: jobs expired more than 30 days ago.
+        Index(
+            "ix_jobs_expired_expired_at",
+            "expired_at",
+            postgresql_where=text("status = 'expired'"),
+        ),
+        # Authoritative sync miss: the active jobs of one board.
+        Index(
+            "ix_jobs_active_source_source_board",
+            "source",
+            "source_board",
+            postgresql_where=_ACTIVE,
+        ),
         Index("ix_jobs_search_tsv", "search_tsv", postgresql_using="gin"),
         Index(
             "ix_jobs_active_work_mode_location_city",
@@ -87,6 +120,9 @@ class Job(UUIDPrimaryKey, Timestamps, Base):
     )
 
     source: Mapped[str] = mapped_column(Text)
+    # The company board within the source (Lever slug / Greenhouse board token); live checks
+    # and the per-board sync miss need it.
+    source_board: Mapped[str] = mapped_column(Text)
     external_id: Mapped[str] = mapped_column(Text)
     # Nullable on purpose: some feeds omit the company, and inventing an "Unknown" company
     # would assert something the source never said.
@@ -106,6 +142,10 @@ class Job(UUIDPrimaryKey, Timestamps, Base):
     posted_at: Mapped[datetime | None]
     expires_at: Mapped[datetime | None]
     status: Mapped[str] = mapped_column(Text, server_default=text("'active'"))
+    expired_at: Mapped[datetime | None]
+    expired_reason: Mapped[str | None] = mapped_column(Text)
+    # Last time a source confirmed this posting is live (sync or live check).
+    last_verified_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
     content_hash: Mapped[bytes] = mapped_column(BYTEA)
     canonical_hash: Mapped[bytes] = mapped_column(BYTEA, index=True)
     first_seen_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
@@ -158,7 +198,8 @@ class IngestionRun(UUIDPrimaryKey, Timestamps, Base):
     __tablename__ = "ingestion_runs"
     __table_args__ = (
         CheckConstraint(
-            "fetched >= 0 AND inserted >= 0 AND updated >= 0 AND unchanged >= 0 AND failed >= 0",
+            "fetched >= 0 AND inserted >= 0 AND updated >= 0 AND unchanged >= 0 "
+            "AND failed >= 0 AND expired >= 0 AND purged >= 0",
             name="counts_non_negative",
         ),
         CheckConstraint(
@@ -174,6 +215,9 @@ class IngestionRun(UUIDPrimaryKey, Timestamps, Base):
     updated: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     unchanged: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     failed: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    # Jobs this run moved to expired (sync) or hard-deleted (purge).
+    expired: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    purged: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     notes: Mapped[str | None] = mapped_column(Text)
 
 

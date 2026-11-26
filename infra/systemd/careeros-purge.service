@@ -1,0 +1,15 @@
+# Install: copy to /etc/systemd/system/, then `systemctl enable --now careeros-purge.timer`.
+[Unit]
+Description=CareerOS daily purge of long-expired jobs and dead sessions (blueprint 6.4.2)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/careeros/infra
+ExecStart=/usr/bin/docker compose run --rm --no-deps api python -m app.cli purge
+TimeoutStartSec=15min
+NoNewPrivileges=true
+PrivateTmp=true

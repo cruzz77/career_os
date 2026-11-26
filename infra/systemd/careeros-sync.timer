@@ -1,0 +1,12 @@
+[Unit]
+Description=Run CareerOS sync + embed hourly
+
+[Timer]
+OnCalendar=hourly
+# Spreads the ~80 list requests away from the top of the hour; sources rate-limit bursts.
+RandomizedDelaySec=5min
+# Catch up once after downtime instead of silently skipping the missed run.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -98,6 +98,30 @@ class AgentRunStatus(StrEnum):
     STEP_LIMIT_EXCEEDED = "step_limit_exceeded"
 
 
+class ExpiredReason(StrEnum):
+    MISSING_FROM_SOURCE = "missing_from_source"
+    SOURCE_NOT_FOUND = "source_not_found"
+    PAST_EXPIRES_AT = "past_expires_at"
+    STALE_NOT_SEEN = "stale_not_seen"
+    TAKEDOWN = "takedown"
+
+
+class PostingStatus(StrEnum):
+    """Result of asking a source about one posting. Sources map 404 and 410 to NOT_FOUND."""
+
+    OPEN = "open"
+    NOT_FOUND = "not_found"
+    ERROR = "error"
+
+
+class Availability(StrEnum):
+    """What a job card tells the user. Never "open" unless a source confirmed it recently."""
+
+    OPEN = "open"
+    CLOSED = "closed"
+    UNVERIFIED = "unverified"
+
+
 # At most one active preference per user for these; enforced by a partial unique index.
 SINGLE_VALUED_DIMENSIONS: frozenset[PreferenceDimension] = frozenset(
     {PreferenceDimension.SENIORITY}

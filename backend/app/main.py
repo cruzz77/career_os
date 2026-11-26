@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Final
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routers import auth, health
+from app.api.routers import auth, health, jobs
 from app.core.config import Settings, get_settings
 from app.core.deps import AppState
 from app.core.errors import register_exception_handlers
@@ -20,18 +20,25 @@ from app.core.readiness import DatabaseReadiness
 from app.core.security import PasswordHasher
 from app.db.session import Database
 from app.modules.auth.service import AuthService, SessionPolicy
+from app.modules.jobs.freshness import JobFreshnessService, PostingChecker
 
 _HEALTH_PATHS: Final = frozenset({"/health", "/health/ready"})
 _DOCS_PATHS: Final = frozenset({"/docs", "/docs/oauth2-redirect", "/openapi.json"})
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    posting_checkers: Mapping[str, PostingChecker] | None = None,
+) -> FastAPI:
+    """posting_checkers maps jobs.source to its live checker. The Retrieval chat registers
+    its sources here; a source without one is served as "unverified", never as "open"."""
     resolved = settings or get_settings()
     configure_logging(resolved.log_level, json_output=resolved.log_json)
     docs_enabled = not resolved.is_production
     app = FastAPI(
         title="CareerOS API",
-        lifespan=_lifespan(resolved),
+        lifespan=_lifespan(resolved, posting_checkers or {}),
         docs_url="/docs" if docs_enabled else None,
         redoc_url=None,
         openapi_url="/openapi.json" if docs_enabled else None,
@@ -57,10 +64,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RequestContextMiddleware)
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(jobs.router)
     return app
 
 
-def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
+def _lifespan(
+    settings: Settings, posting_checkers: Mapping[str, PostingChecker]
+) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         database = Database.from_settings(settings)
@@ -79,6 +89,7 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
                 rate_limiter=rate_limiter,
                 login_email_limit=rate_limits.login_per_email,
             ),
+            job_freshness=JobFreshnessService(database, posting_checkers),
         )
         try:
             yield

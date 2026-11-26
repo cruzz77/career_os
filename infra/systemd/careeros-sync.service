@@ -1,0 +1,19 @@
+# Install: copy to /etc/systemd/system/, then `systemctl enable --now careeros-sync.timer`.
+[Unit]
+Description=CareerOS hourly job sync, then embedding (blueprint 6.4.2, 6.6)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/careeros/infra
+# --no-deps: db and api are already running; without it every run would also start the
+# one-shot migrate service. A failing sync stops the unit before embed runs.
+ExecStart=/usr/bin/docker compose run --rm --no-deps api python -m app.cli sync
+ExecStart=/usr/bin/docker compose run --rm --no-deps api python -m app.cli embed
+TimeoutStartSec=45min
+NoNewPrivileges=true
+PrivateTmp=true

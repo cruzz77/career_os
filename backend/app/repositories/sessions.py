@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import UserSession
@@ -61,3 +61,18 @@ async def delete_by_token_hash(session: AsyncSession, token_hash: bytes) -> bool
         delete(UserSession).where(UserSession.token_hash == token_hash).returning(UserSession.id)
     )
     return deleted is not None
+
+
+async def delete_expired(session: AsyncSession, *, now: datetime, absolute_ttl: timedelta) -> int:
+    """The exact complement of get_active: nothing that could still authenticate is deleted."""
+    deleted = await session.scalars(
+        delete(UserSession)
+        .where(
+            or_(
+                UserSession.expires_at <= now,
+                UserSession.created_at <= now - absolute_ttl,
+            )
+        )
+        .returning(UserSession.id)
+    )
+    return len(deleted.all())

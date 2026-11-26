@@ -84,6 +84,7 @@ def _insert_user(conn: psycopg.Connection, email: str | None = None) -> uuid.UUI
 def _insert_job(conn: psycopg.Connection, **overrides: object) -> uuid.UUID:
     values: dict[str, object] = {
         "source": "test",
+        "source_board": "test-board",
         "external_id": uuid.uuid4().hex,
         "title": "Backend Engineer",
         "description": "Build APIs",
@@ -244,3 +245,61 @@ def test_models_and_migrations_agree(fresh_database: str) -> None:
     config = _alembic_config(fresh_database)
     command.upgrade(config, "head")
     command.check(config)
+
+
+def test_active_job_cannot_carry_expiry_fields(migrated: psycopg.Connection) -> None:
+    job_id = _insert_job(migrated)
+    with pytest.raises(errors.CheckViolation, match="ck_jobs_expired_fields_iff_expired"):
+        migrated.execute(
+            "UPDATE jobs SET expired_at = now(), expired_reason = 'takedown' WHERE id = %s",
+            (job_id,),
+        )
+
+
+def test_expired_job_must_say_when_and_why(migrated: psycopg.Connection) -> None:
+    job_id = _insert_job(migrated)
+    with pytest.raises(errors.CheckViolation, match="ck_jobs_expired_fields_iff_expired"):
+        migrated.execute("UPDATE jobs SET status = 'expired' WHERE id = %s", (job_id,))
+    with pytest.raises(
+        errors.CheckViolation, match=r"ck_jobs_expired_(fields_iff_expired|at_with_reason)"
+    ):
+        migrated.execute(
+            "UPDATE jobs SET status = 'expired', expired_at = now() WHERE id = %s", (job_id,)
+        )
+
+
+def test_expire_and_reactivate_round_trip(migrated: psycopg.Connection) -> None:
+    job_id = _insert_job(migrated)
+    migrated.execute(
+        "UPDATE jobs SET status = 'expired', expired_at = now(), "
+        "expired_reason = 'missing_from_source' WHERE id = %s",
+        (job_id,),
+    )
+    migrated.execute(
+        "UPDATE jobs SET status = 'active', expired_at = NULL, expired_reason = NULL WHERE id = %s",
+        (job_id,),
+    )
+    row = migrated.execute(
+        "SELECT status, last_verified_at IS NOT NULL FROM jobs WHERE id = %s", (job_id,)
+    ).fetchone()
+    assert row == ("active", True)
+
+
+def test_unknown_expiry_reason_is_rejected(migrated: psycopg.Connection) -> None:
+    job_id = _insert_job(migrated)
+    with pytest.raises(errors.CheckViolation, match="ck_jobs_expired_reason"):
+        migrated.execute(
+            "UPDATE jobs SET status = 'expired', expired_at = now(), expired_reason = 'bored' "
+            "WHERE id = %s",
+            (job_id,),
+        )
+
+
+def test_blank_source_board_is_rejected(migrated: psycopg.Connection) -> None:
+    with pytest.raises(errors.CheckViolation, match="ck_jobs_source_board_not_blank"):
+        _insert_job(migrated, source_board="  ")
+
+
+def test_ingestion_run_counts_cannot_go_negative(migrated: psycopg.Connection) -> None:
+    with pytest.raises(errors.CheckViolation, match="ck_ingestion_runs_counts_non_negative"):
+        migrated.execute("INSERT INTO ingestion_runs (source, purged) VALUES ('purge', -1)")

@@ -1,7 +1,8 @@
 """Core schema: every table in blueprint section 5 except the eval_* tables (section 5.1).
 
-Frozen DDL, generated once from the models and reviewed line by line. Never regenerate it:
-later schema changes are new migrations.
+Frozen DDL, generated from the models and reviewed line by line. Amended once before release
+(blueprint v0.3.4: job lifecycle columns, section 5.1 amendment). From release R1 onwards it is
+immutable: every schema change is a new migration.
 
 Revision ID: 0001_core
 Revises:
@@ -61,12 +62,14 @@ CREATE TABLE ingestion_runs (
     updated INTEGER DEFAULT 0 NOT NULL,
     unchanged INTEGER DEFAULT 0 NOT NULL,
     failed INTEGER DEFAULT 0 NOT NULL,
+    expired INTEGER DEFAULT 0 NOT NULL,
+    purged INTEGER DEFAULT 0 NOT NULL,
     notes TEXT,
     id UUID DEFAULT gen_random_uuid() NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     CONSTRAINT pk_ingestion_runs PRIMARY KEY (id),
-    CONSTRAINT ck_ingestion_runs_counts_non_negative CHECK (fetched >= 0 AND inserted >= 0 AND updated >= 0 AND unchanged >= 0 AND failed >= 0),
+    CONSTRAINT ck_ingestion_runs_counts_non_negative CHECK (fetched >= 0 AND inserted >= 0 AND updated >= 0 AND unchanged >= 0 AND failed >= 0 AND expired >= 0 AND purged >= 0),
     CONSTRAINT ck_ingestion_runs_finished_after_started CHECK (finished_at IS NULL OR finished_at >= started_at)
 )
 """,
@@ -116,6 +119,7 @@ CREATE INDEX ix_conversations_user_id ON conversations (user_id)
     """
 CREATE TABLE jobs (
     source TEXT NOT NULL,
+    source_board TEXT NOT NULL,
     external_id TEXT NOT NULL,
     company_id UUID,
     title TEXT NOT NULL,
@@ -129,6 +133,9 @@ CREATE TABLE jobs (
     posted_at TIMESTAMP WITH TIME ZONE,
     expires_at TIMESTAMP WITH TIME ZONE,
     status TEXT DEFAULT 'active' NOT NULL,
+    expired_at TIMESTAMP WITH TIME ZONE,
+    expired_reason TEXT,
+    last_verified_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
     content_hash BYTEA NOT NULL,
     canonical_hash BYTEA NOT NULL,
     first_seen_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
@@ -149,11 +156,21 @@ CREATE TABLE jobs (
     CONSTRAINT ck_jobs_canonical_hash_length CHECK (octet_length(canonical_hash) = 32),
     CONSTRAINT ck_jobs_expires_after_posted CHECK (expires_at IS NULL OR posted_at IS NULL OR expires_at >= posted_at),
     CONSTRAINT ck_jobs_seen_in_order CHECK (last_seen_at >= first_seen_at),
+    CONSTRAINT ck_jobs_expired_reason CHECK (expired_reason IN ('missing_from_source', 'source_not_found', 'past_expires_at', 'stale_not_seen', 'takedown')),
+    CONSTRAINT ck_jobs_expired_fields_iff_expired CHECK ((status = 'expired') = (expired_at IS NOT NULL AND expired_reason IS NOT NULL)),
+    CONSTRAINT ck_jobs_expired_at_with_reason CHECK ((expired_at IS NULL) = (expired_reason IS NULL)),
+    CONSTRAINT ck_jobs_source_board_not_blank CHECK (length(btrim(source_board)) > 0),
     CONSTRAINT fk_jobs_company_id_companies FOREIGN KEY(company_id) REFERENCES companies (id) ON DELETE RESTRICT
 )
 """,
     """
 CREATE INDEX ix_jobs_active_employment_type_seniority ON jobs (employment_type, seniority) WHERE status = 'active'
+""",
+    """
+CREATE INDEX ix_jobs_active_last_seen_at ON jobs (last_seen_at) WHERE status = 'active'
+""",
+    """
+CREATE INDEX ix_jobs_active_source_source_board ON jobs (source, source_board) WHERE status = 'active'
 """,
     """
 CREATE INDEX ix_jobs_active_work_mode_location_city ON jobs (work_mode, location_city) WHERE status = 'active'
@@ -163,6 +180,9 @@ CREATE INDEX ix_jobs_canonical_hash ON jobs (canonical_hash)
 """,
     """
 CREATE INDEX ix_jobs_company_id ON jobs (company_id)
+""",
+    """
+CREATE INDEX ix_jobs_expired_expired_at ON jobs (expired_at) WHERE status = 'expired'
 """,
     """
 CREATE INDEX ix_jobs_search_tsv ON jobs USING gin (search_tsv)
