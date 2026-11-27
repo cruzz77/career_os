@@ -1,0 +1,23 @@
+# Lever company boards ingested by CareerOS (blueprint 6.4.1). Versioned config, never code.
+# Each slug was validated by the volume check of 2026-11-27 (docs/data-provenance.md section 6).
+# Adding a company: append an entry, bump `version`, and add a row to the provenance doc.
+# Takedown: delete the entry; the next sync stops fetching it and the stale sweep expires its jobs.
+#
+# instance: "global" -> api.lever.co, "eu" -> api.eu.lever.co
+# name: display name. Lever postings carry no company name, so it comes from here.
+version: 1
+validated_on: 2026-11-27
+companies:
+  - {slug: palantir,   name: Palantir,   instance: global}
+  - {slug: zoox,       name: Zoox,       instance: global}
+  - {slug: paytm,      name: Paytm,      instance: global}
+  - {slug: spotify,    name: Spotify,    instance: global}
+  - {slug: meesho,     name: Meesho,     instance: global}
+  - {slug: zeta,       name: Zeta,       instance: global}
+  - {slug: mindtickle, name: Mindtickle, instance: global}
+  - {slug: cred,       name: CRED,       instance: global}
+  - {slug: binance,    name: Binance,    instance: global}
+  # Boards that exist but had no published postings on 2026-11-27. Kept: a valid empty board
+  # costs one request an hour, and its postings appear as soon as the company publishes.
+  - {slug: freshworks, name: Freshworks, instance: global}
+  - {slug: kraken,     name: Kraken,     instance: global}

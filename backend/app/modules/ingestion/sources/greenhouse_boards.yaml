@@ -1,0 +1,87 @@
+# Greenhouse job boards ingested by CareerOS (blueprint 6.4.1, decision v0.3.5 option B).
+# Versioned config, never code. Each token was validated by the volume check of 2026-11-27
+# (docs/data-provenance.md section 6). Takedown: delete the entry.
+#
+# Hard-filter fields are filled only from values the board states (blueprint 6.4.1):
+#   metadata: a board's structured custom fields, mapped through an exact table.
+#   location_work_mode: work-mode words this board puts in its location strings. A shared grammar
+#     finds the word at the start ("Remote - India", "Hybrid in Bangalore", "Remote, Canada") or the
+#     end ("Redwood City, CA (Hybrid)", "Texas Remote") of each ";"-separated segment. Only words
+#     listed here count; a segment without one has no stated mode.
+# Never inferred from the description, by keyword search, or by an LLM.
+#
+# Matching: table keys are stored normalised (casefolded, whitespace collapsed); raw values are
+# normalised the same way, then looked up exactly. No match -> unknown, and the raw value is
+# counted in ingestion_runs.notes.
+# More than one value: segments with different modes, a multi-valued field, or a metadata value
+# that disagrees with the location -> unknown.
+version: 1
+validated_on: 2026-11-27
+boards:
+  - token: databricks
+    name: Databricks
+    location_work_mode: {remote: remote}
+
+  - token: mongodb
+    name: MongoDB
+    metadata:
+      employment_type:
+        field: Employment Type
+        values: {full-time: full_time, contract: contract, intern: internship}
+      work_mode:
+        field: Working Model Eligibility
+        values:
+          1-in office: onsite
+          2-flexible: hybrid
+          3-fully remote: remote
+          3cf-customer facing remote: remote
+      seniority:
+        # Only levels that name a seniority. "professional - ic", "ic - professional",
+        # "people manager" and "manager" say nothing about it, so they stay unknown.
+        field: Job Level
+        values:
+          intern: intern
+          senior manager: senior
+          vice president: senior
+          senior vice president: senior
+
+  - token: okta
+    name: Okta
+    location_work_mode: {remote: remote}
+
+  - token: gitlab
+    name: GitLab
+    location_work_mode: {remote: remote}
+
+  - token: rubrik
+    name: Rubrik
+    location_work_mode: {remote: remote}
+
+  - token: twilio
+    name: Twilio
+    location_work_mode: {remote: remote}
+
+  - token: inmobi
+    name: InMobi
+    metadata:
+      employment_type:
+        field: Employment Type
+        values: {full time employee: full_time, fte: full_time, direct consultant: contract}
+      country:
+        # Country names go through the shared country table; a multi-valued entry stays unknown.
+        field: Base Country
+
+  - token: hackerrank
+    name: HackerRank
+    location_work_mode: {remote: remote, hybrid: hybrid, onsite: onsite, in-office: onsite}
+
+  - token: druva
+    name: Druva
+    location_work_mode: {remote: remote}
+
+  - token: observeai
+    name: Observe.AI
+    location_work_mode: {remote: remote, hybrid: hybrid}
+
+  - token: groww
+    name: Groww

@@ -45,6 +45,8 @@ class Settings(BaseSettings):
 
     # Owned by the Retrieval chat; the Dockerfile bakes the same value in as a build arg.
     embedding_model: str = "BAAI/bge-small-en-v1.5"
+    # Contact address in the job-source User-Agent (blueprint 6.4.1). `cli sync` requires it.
+    source_contact_email: str | None = None
 
     @field_validator("database_url")
     @classmethod

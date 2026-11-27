@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.14.4",
     "pydantic-settings>=2.16.3",
     "python-multipart>=0.0.34",
+    "pyyaml>=6.0.4",
     "sqlalchemy[asyncio]>=2.1.9",
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.54.0",
@@ -28,6 +29,7 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.17.6",
     "testcontainers>=4.15.0",
+    "types-pyyaml>=6.0",
 ]
 
 [tool.ruff]

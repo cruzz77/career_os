@@ -13,6 +13,7 @@ from psycopg import errors, sql
 from sqlalchemy import create_engine
 from sqlalchemy.schema import CreateIndex, CreateTable
 
+from app.db.migration_objects import MIGRATION_ONLY_INDEXES
 from app.db.models import Base
 
 pytestmark = pytest.mark.integration
@@ -116,7 +117,7 @@ def test_every_model_constraint_and_index_exists_by_name(migrated: psycopg.Conne
         (_MODEL_TABLES,),
     ).fetchall()
     in_database = {row[0] for row in constraints} | {row[0] for row in indexes}
-    assert in_database == _model_object_names()
+    assert in_database == _model_object_names() | MIGRATION_ONLY_INDEXES
 
 
 @pytest.mark.parametrize("column", ["work_mode", "employment_type", "seniority", "status"])

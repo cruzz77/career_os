@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
+from app.db.migration_objects import MIGRATION_ONLY_INDEXES
 from app.db.models import Base
 
 config = context.config
@@ -18,6 +19,12 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
+
+
+def _include_object(
+    obj: object, name: str | None, type_: str, reflected: bool, compare_to: object
+) -> bool:
+    return not (type_ == "index" and name in MIGRATION_ONLY_INDEXES)
 
 
 def _database_url() -> str:
@@ -31,6 +38,7 @@ def _run_migrations(connection: Connection) -> None:
         connection=connection,
         target_metadata=target_metadata,
         compare_type=True,
+        include_object=_include_object,
         transaction_per_migration=True,
     )
     with context.begin_transaction():
